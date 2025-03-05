@@ -27,3 +27,5 @@ Run `npm install` at the root of the project to install all the dependencies.
 2) Run `npm run edgeworker:deploy` to deploy the build to the Akamai network
 3) Run `npm run edgeworker:activate` to activate the build on the Akamai staging network
 4) Run `npm run edgeworker:status` to check the activation status; when is `COMPLETE` the activation is done
+
+5) With changes
