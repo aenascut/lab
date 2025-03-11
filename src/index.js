@@ -12,7 +12,7 @@ export async function responseProvider(request, response) {
   try {
     logger.log("Creating response from the EdgeWorker");
 
-    // Exercise 1. Create a new client instance
+    // Exercise 2. Create a new client instance
     // const client = await Client({
     //   orgId: "906E3A095DC834230A495FD6@AdobeOrg",
     //   datastreamId: DATASTREAM_ID,
