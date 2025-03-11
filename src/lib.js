@@ -66,6 +66,7 @@ const MESSAGES = {
   },
   SEND_EVENT: {
     MULTIPLE_ECID: "Multiple ECIDs found in the request. Using the last one.",
+    RULES_ENGINE_FAILED_EXECUTION: "Rules engine failed to execute",
   },
 };
 
@@ -86,6 +87,7 @@ const TOKENS = {
   RNG: "RNG",
   LOGGER: "LOGGER",
   HTTP_CLIENT: "HTTP_CLIENT",
+  MD5: "MD5",
 };
 
 const createRegistry = () => {
@@ -218,13 +220,13 @@ governing permissions and limitations under the License.
 */
 
 
-function createBigIntFromParts(low, high) {
+const createBigIntFromParts = (low, high) => {
   low = BigInt.asUintN(32, BigInt(low));
   high = BigInt.asUintN(32, BigInt(high));
   const combined = (high << 32n) | low;
   return BigInt.asIntN(64, combined);
-}
-function uuidFromString(uuidString) {
+};
+const uuidFromString = (uuidString) => {
   const cleanedUuid = uuidString.replace(/-/g, "");
   let high32Bits = 0;
   let low32Bits = 0;
@@ -252,7 +254,7 @@ function uuidFromString(uuidString) {
 
   const low64BigInt = createBigIntFromParts(low32Bits, high32Bits);
   return { low64BigInt, high64BigInt };
-}
+};
 
 const generateECID = () => {
   const generatedUuid = uuid();
@@ -262,6 +264,26 @@ const generateECID = () => {
   const positiveLow = low64BigInt?.toString().replaceAll("-", "");
 
   return positiveHigh + positiveLow;
+};
+
+const generateEcidFromFpid = (orgId, fpid) => {
+  const SECTION_LENGTH = 19;
+  const md5 = Container().getInstance(TOKENS.MD5);
+  const generatedUuid = md5(`${orgId}:${fpid}`);
+
+  const { low64BigInt, high64BigInt } = uuidFromString(generatedUuid);
+  const MAX_VALUE = BigInt("9223372036854775807"); // Long.MAX_VALUE from Java; gets rid of the negative sign, if number is negative
+
+  const positiveHigh = (high64BigInt & MAX_VALUE)
+    ?.toString()
+    .replaceAll("-", "");
+
+  const positiveLow = (low64BigInt & MAX_VALUE)?.toString().replaceAll("-", "");
+
+  return (
+    positiveHigh.padStart(SECTION_LENGTH, "0") +
+    positiveLow.padStart(SECTION_LENGTH, "0")
+  );
 };
 
 /*
@@ -294,6 +316,7 @@ const getRequestIdentity = (namespaceCode) => {
   };
 };
 const getRequestEcidIdentity = getRequestIdentity("ECID");
+const getRequestFpidIdentity = getRequestIdentity("FPID");
 
 const createResponseIdentityPayload = (event) => {
   const payloads = Object.keys(event.xdm.identityMap).flatMap((namespace) => {
@@ -328,51 +351,55 @@ const createResponseIdentityPayload = (event) => {
  * @param {import("../types/Client").ClientOptions} clientOptions
  * @returns {import("../types/Client").SendEvent}
  */
-const sendEvent = (clientOptions) => {
-  return async (requestBody) => {
-    const logAdapterInstance = Container().getInstance(TOKENS.LOGGER);
-    const { rulesEngine } = { ...clientOptions };
+const sendEvent = async (clientOptions, requestBody) => {
+  const logAdapterInstance = Container().getInstance(TOKENS.LOGGER);
+  const { rulesEngine, orgId } = { ...clientOptions };
+  const requestEcid = getRequestEcidIdentity(requestBody);
 
-    const ecid = getRequestEcidIdentity(requestBody) || [
-      {
-        id: generateECID(),
+  let ecid = requestEcid || [{ id: "" }];
+
+  if (!requestEcid) {
+    const requestFpid = getRequestFpidIdentity(requestBody);
+    ecid[0].id = requestFpid
+      ? generateEcidFromFpid(orgId, requestFpid[0].id)
+      : generateECID();
+  }
+
+  const event = {
+    ...requestBody,
+    xdm: {
+      ...requestBody?.xdm,
+      identityMap: {
+        ...requestBody?.xdm?.identityMap,
+        ECID: ecid,
       },
-    ];
-    const event = {
-      ...requestBody,
-      xdm: {
-        ...requestBody?.xdm,
-        identityMap: {
-          ...requestBody?.xdm?.identityMap,
-          ECID: ecid,
-        },
-      },
-    };
+    },
+  };
 
-    const context = {
-      ...event,
-      ...flatten(event),
-    };
-    let rulesConsequences = [];
-    try {
-      rulesConsequences = rulesEngine.execute(context);
-    } catch (e) {
-      logAdapterInstance.log("error while executing rule engine", e);
-      return [];
-    }
+  const context = {
+    ...event,
+    ...flatten(event),
+  };
+  let rulesConsequences = [];
+  try {
+    rulesConsequences = rulesEngine.execute(context);
+  } catch (e) {
+    logAdapterInstance.log(
+      MESSAGES.SEND_EVENT.RULES_ENGINE_FAILED_EXECUTION,
+      e,
+    );
+    return [];
+  }
 
-    const decisions = {
-      eventIndex: 0,
-      type: "personalization:decisions",
-      payload: rulesConsequences
-        .flat(1)
-        .map((consequence) => consequence.detail),
-    };
+  const decisions = {
+    eventIndex: 0,
+    type: "personalization:decisions",
+    payload: rulesConsequences.flat(1).map((consequence) => consequence.detail),
+  };
 
-    return {
-      requestId: uuid(),
-      handle: [createResponseIdentityPayload(event), decisions],
-    };
+  return {
+    requestId: uuid(),
+    handle: [createResponseIdentityPayload(event), decisions],
   };
 };
 
@@ -410,7 +437,7 @@ const getDomain$1 = (edgeDomain) => {
   return " ";
 };
 
-const edgeRequester = (clientOptions, endpoint, requestBody) => {
+const edgeRequester = async (clientOptions, endpoint, requestBody) => {
   const httpRequestAdapterInstance = Container().getInstance(
     TOKENS.HTTP_CLIENT,
   );
@@ -422,8 +449,8 @@ const edgeRequester = (clientOptions, endpoint, requestBody) => {
     getDomain$1(edgeDomain),
     edgeBasePath || EXP_EDGE_BASE_PATH_PROD,
     "irl1",
-    "v1",
-    `${endpoint}?configId=${datastreamId}&requestId=${requestId}`,
+    "v2",
+    `${endpoint}?dataStreamId=${datastreamId}&requestId=${requestId}`,
   ]
     .filter((elem) => elem.length > 0)
     .join("/")
@@ -435,7 +462,7 @@ const edgeRequester = (clientOptions, endpoint, requestBody) => {
 
   return httpRequestAdapterInstance.makeRequest(requestUrl, {
     headers,
-    body: requestBody,
+    body: JSON.stringify(requestBody),
     method: "POST",
   });
 };
@@ -453,10 +480,8 @@ governing permissions and limitations under the License.
 */
 
 
-const remoteSendEvent = (clientOptions) => {
-  return async (requestBody) => {
-    return edgeRequester(clientOptions, "interact", requestBody);
-  };
+const remoteSendEvent = async (clientOptions, requestBody) => {
+  return await edgeRequester(clientOptions, "interact", requestBody);
 };
 
 /*
@@ -472,10 +497,8 @@ governing permissions and limitations under the License.
 */
 
 
-const sendNotification = (clientOptions) => {
-  return async (requestBody) => {
-    return edgeRequester(clientOptions, "collect", requestBody);
-  };
+const sendNotification = async (clientOptions, requestBody) => {
+  return edgeRequester(clientOptions, "interact", requestBody);
 };
 
 const ConditionType = {
@@ -502,7 +525,6 @@ const LogicType = {
   OR: "or"
 };
 const SearchType = {
-  ANY: "any",
   ORDERED: "ordered"
 };
 
@@ -1280,7 +1302,6 @@ const ruleRequester = async (clientOptions) => {
   const httpRequestAdapterInstance = Container().getInstance(
     TOKENS.HTTP_CLIENT,
   );
-  //https://assets.adobetarget.com/aep-odd-rules/906E3A095DC834230A495FD6%40AdobeOrg/production/v1/rules.json
   const requestUrl = [
     getDomain(ruleDomain),
     ruleBasePath || RULE_BASE_PATH_PROD,
@@ -1295,13 +1316,60 @@ const ruleRequester = async (clientOptions) => {
     .trim();
 
   try {
-    const response = await httpRequestAdapterInstance.makeRequest(requestUrl, {
+    return await httpRequestAdapterInstance.makeRequest(requestUrl, {
       headers: DEFAULT_REQUEST_HEADERS,
     });
-    return response;
   } catch (e) {
     throw new Error(`${MESSAGES.RULES_ENGINE.FETCH_ERROR}, ${e}`);
   }
+};
+
+/*
+Copyright 2025 Adobe. All rights reserved.
+This file is licensed to you under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License. You may obtain a copy
+of the License at http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under
+the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR REPRESENTATIONS
+OF ANY KIND, either express or implied. See the License for the specific language
+governing permissions and limitations under the License.
+*/
+
+const eventNotificationAdaptor = (requestBody, response) => {
+  const decisions = response.handle?.find(
+    (handle) => handle.type === "personalization:decisions",
+  );
+  const propositions =
+    decisions?.payload.map((proposition) => {
+      const { id, scope, scopeDetails } = proposition;
+
+      return {
+        id,
+        scope,
+        scopeDetails,
+      };
+    }) || [];
+
+  const displayEvent = {
+    event: {
+      xdm: {
+        ...requestBody.xdm,
+        eventType: "decisioning.propositionDisplay",
+        timestamp: new Date().toISOString(),
+        _experience: {
+          decisioning: {
+            propositions: propositions,
+            propositionEventType: {
+              display: 1,
+            },
+          },
+        },
+      },
+    },
+  };
+
+  return displayEvent;
 };
 
 /*
@@ -1322,29 +1390,48 @@ governing permissions and limitations under the License.
  * @param {import("../types/Client").ClientOptions} clientOptions
  * @returns {Promise<import("../types/Client").ClientResponse>}
  */
-
 async function BaseClient(clientOptions) {
   const options = { ...clientOptions };
+  const sendEventFunc = options.oddEnabled ? sendEvent : remoteSendEvent;
 
-  if (!options.rules && clientOptions.oddEnabled) {
-    const rules = await ruleRequester(options);
-    if (!rules) {
-      throw new Error(MESSAGES.RULES_ENGINE.EMPTY_RULES_ERROR);
+  if (options.oddEnabled) {
+    if (!options.rules) {
+      const rules = await ruleRequester(options);
+      if (!rules) {
+        throw new Error(MESSAGES.RULES_ENGINE.EMPTY_RULES_ERROR);
+      }
+      options.rules = rules;
     }
-    options.rules = rules;
-  }
 
-  if (clientOptions.oddEnabled) {
+    if (options.rulesPoolingInterval) {
+      const intervalInMilliseconds = options.rulesPoolingInterval * 1000;
+      setInterval(async () => {
+        const rules = await ruleRequester(options);
+        if (!rules) {
+          throw new Error(MESSAGES.RULES_ENGINE.EMPTY_RULES_ERROR);
+        }
+        options.rules = rules;
+        options.rulesEngine = RuleEngine(options);
+      }, intervalInMilliseconds);
+    }
+
     options.rulesEngine = RuleEngine(options);
-    return {
-      sendEvent: sendEvent(options),
-      sendNotification: sendNotification(options),
-    };
   }
 
   return {
-    sendEvent: remoteSendEvent(options),
-    sendNotification: sendNotification(options),
+    sendEvent: async (requestBody) => {
+      const response = await sendEventFunc(options, requestBody);
+      if (requestBody?.personalization?.sendDisplayEvent) {
+        const displayEvent = eventNotificationAdaptor(requestBody, response);
+        if (displayEvent) {
+          sendNotification(options, displayEvent);
+        }
+      }
+      return response;
+    },
+    sendNotification: async (requestBody) => {
+      return sendNotification(options, requestBody);
+    },
   };
 }
 
@@ -1376,12 +1463,20 @@ the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR REPRESENTA
 OF ANY KIND, either express or implied. See the License for the specific language
 governing permissions and limitations under the License.
 */
+
 const createHttpRequestAdapter = () => {
   const makeRequest = async (url, options) => {
     try {
       const response = await httpRequest(url, options);
-      const data = await response.json();
-      return data;
+      if (response.status === 204) {
+        return null; // No content to return
+      }
+      if (response.ok) {
+        return await response.json();
+      }
+      logger.log(
+        `Failed to make request for ${url} with options ${JSON.stringify(options)}`,
+      );
     } catch (error) {
       logger.log(
         `Failed to make request for ${url} with options ${JSON.stringify(options)}`,
@@ -1396,6 +1491,504 @@ const createHttpRequestAdapter = () => {
   };
 };
 const httpRequestAdapterInstance = createHttpRequestAdapter();
+
+/*
+Copyright 2025 Adobe. All rights reserved.
+This file is licensed to you under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License. You may obtain a copy
+of the License at http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under
+the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR REPRESENTATIONS
+OF ANY KIND, either express or implied. See the License for the specific language
+governing permissions and limitations under the License.
+*/
+
+const md5 = function (data) {
+  var r = M(V(Y(X(data), 8 * data.length)));
+  return r.toLowerCase();
+};
+function M(d) {
+  for (var _, m = "0123456789ABCDEF", f = "", r = 0; r < d.length; r++)
+    (_ = d.charCodeAt(r)), (f += m.charAt((_ >>> 4) & 15) + m.charAt(15 & _));
+  return f;
+}
+function X(d) {
+  for (var _ = Array(d.length >> 2), m = 0; m < _.length; m++) _[m] = 0;
+  for (m = 0; m < 8 * d.length; m += 8)
+    _[m >> 5] |= (255 & d.charCodeAt(m / 8)) << m % 32;
+  return _;
+}
+function V(d) {
+  for (var _ = "", m = 0; m < 32 * d.length; m += 8)
+    _ += String.fromCharCode((d[m >> 5] >>> m % 32) & 255);
+  return _;
+}
+function Y(d, _) {
+  (d[_ >> 5] |= 128 << _ % 32), (d[14 + (((_ + 64) >>> 9) << 4)] = _);
+  for (
+    var m = 1732584193, f = -271733879, r = -1732584194, i = 271733878, n = 0;
+    n < d.length;
+    n += 16
+  ) {
+    var h = m,
+      t = f,
+      g = r,
+      e = i;
+    (f = md5_ii(
+      (f = md5_ii(
+        (f = md5_ii(
+          (f = md5_ii(
+            (f = md5_hh(
+              (f = md5_hh(
+                (f = md5_hh(
+                  (f = md5_hh(
+                    (f = md5_gg(
+                      (f = md5_gg(
+                        (f = md5_gg(
+                          (f = md5_gg(
+                            (f = md5_ff(
+                              (f = md5_ff(
+                                (f = md5_ff(
+                                  (f = md5_ff(
+                                    f,
+                                    (r = md5_ff(
+                                      r,
+                                      (i = md5_ff(
+                                        i,
+                                        (m = md5_ff(
+                                          m,
+                                          f,
+                                          r,
+                                          i,
+                                          d[n + 0],
+                                          7,
+                                          -680876936,
+                                        )),
+                                        f,
+                                        r,
+                                        d[n + 1],
+                                        12,
+                                        -389564586,
+                                      )),
+                                      m,
+                                      f,
+                                      d[n + 2],
+                                      17,
+                                      606105819,
+                                    )),
+                                    i,
+                                    m,
+                                    d[n + 3],
+                                    22,
+                                    -1044525330,
+                                  )),
+                                  (r = md5_ff(
+                                    r,
+                                    (i = md5_ff(
+                                      i,
+                                      (m = md5_ff(
+                                        m,
+                                        f,
+                                        r,
+                                        i,
+                                        d[n + 4],
+                                        7,
+                                        -176418897,
+                                      )),
+                                      f,
+                                      r,
+                                      d[n + 5],
+                                      12,
+                                      1200080426,
+                                    )),
+                                    m,
+                                    f,
+                                    d[n + 6],
+                                    17,
+                                    -1473231341,
+                                  )),
+                                  i,
+                                  m,
+                                  d[n + 7],
+                                  22,
+                                  -45705983,
+                                )),
+                                (r = md5_ff(
+                                  r,
+                                  (i = md5_ff(
+                                    i,
+                                    (m = md5_ff(
+                                      m,
+                                      f,
+                                      r,
+                                      i,
+                                      d[n + 8],
+                                      7,
+                                      1770035416,
+                                    )),
+                                    f,
+                                    r,
+                                    d[n + 9],
+                                    12,
+                                    -1958414417,
+                                  )),
+                                  m,
+                                  f,
+                                  d[n + 10],
+                                  17,
+                                  -42063,
+                                )),
+                                i,
+                                m,
+                                d[n + 11],
+                                22,
+                                -1990404162,
+                              )),
+                              (r = md5_ff(
+                                r,
+                                (i = md5_ff(
+                                  i,
+                                  (m = md5_ff(
+                                    m,
+                                    f,
+                                    r,
+                                    i,
+                                    d[n + 12],
+                                    7,
+                                    1804603682,
+                                  )),
+                                  f,
+                                  r,
+                                  d[n + 13],
+                                  12,
+                                  -40341101,
+                                )),
+                                m,
+                                f,
+                                d[n + 14],
+                                17,
+                                -1502002290,
+                              )),
+                              i,
+                              m,
+                              d[n + 15],
+                              22,
+                              1236535329,
+                            )),
+                            (r = md5_gg(
+                              r,
+                              (i = md5_gg(
+                                i,
+                                (m = md5_gg(
+                                  m,
+                                  f,
+                                  r,
+                                  i,
+                                  d[n + 1],
+                                  5,
+                                  -165796510,
+                                )),
+                                f,
+                                r,
+                                d[n + 6],
+                                9,
+                                -1069501632,
+                              )),
+                              m,
+                              f,
+                              d[n + 11],
+                              14,
+                              643717713,
+                            )),
+                            i,
+                            m,
+                            d[n + 0],
+                            20,
+                            -373897302,
+                          )),
+                          (r = md5_gg(
+                            r,
+                            (i = md5_gg(
+                              i,
+                              (m = md5_gg(m, f, r, i, d[n + 5], 5, -701558691)),
+                              f,
+                              r,
+                              d[n + 10],
+                              9,
+                              38016083,
+                            )),
+                            m,
+                            f,
+                            d[n + 15],
+                            14,
+                            -660478335,
+                          )),
+                          i,
+                          m,
+                          d[n + 4],
+                          20,
+                          -405537848,
+                        )),
+                        (r = md5_gg(
+                          r,
+                          (i = md5_gg(
+                            i,
+                            (m = md5_gg(m, f, r, i, d[n + 9], 5, 568446438)),
+                            f,
+                            r,
+                            d[n + 14],
+                            9,
+                            -1019803690,
+                          )),
+                          m,
+                          f,
+                          d[n + 3],
+                          14,
+                          -187363961,
+                        )),
+                        i,
+                        m,
+                        d[n + 8],
+                        20,
+                        1163531501,
+                      )),
+                      (r = md5_gg(
+                        r,
+                        (i = md5_gg(
+                          i,
+                          (m = md5_gg(m, f, r, i, d[n + 13], 5, -1444681467)),
+                          f,
+                          r,
+                          d[n + 2],
+                          9,
+                          -51403784,
+                        )),
+                        m,
+                        f,
+                        d[n + 7],
+                        14,
+                        1735328473,
+                      )),
+                      i,
+                      m,
+                      d[n + 12],
+                      20,
+                      -1926607734,
+                    )),
+                    (r = md5_hh(
+                      r,
+                      (i = md5_hh(
+                        i,
+                        (m = md5_hh(m, f, r, i, d[n + 5], 4, -378558)),
+                        f,
+                        r,
+                        d[n + 8],
+                        11,
+                        -2022574463,
+                      )),
+                      m,
+                      f,
+                      d[n + 11],
+                      16,
+                      1839030562,
+                    )),
+                    i,
+                    m,
+                    d[n + 14],
+                    23,
+                    -35309556,
+                  )),
+                  (r = md5_hh(
+                    r,
+                    (i = md5_hh(
+                      i,
+                      (m = md5_hh(m, f, r, i, d[n + 1], 4, -1530992060)),
+                      f,
+                      r,
+                      d[n + 4],
+                      11,
+                      1272893353,
+                    )),
+                    m,
+                    f,
+                    d[n + 7],
+                    16,
+                    -155497632,
+                  )),
+                  i,
+                  m,
+                  d[n + 10],
+                  23,
+                  -1094730640,
+                )),
+                (r = md5_hh(
+                  r,
+                  (i = md5_hh(
+                    i,
+                    (m = md5_hh(m, f, r, i, d[n + 13], 4, 681279174)),
+                    f,
+                    r,
+                    d[n + 0],
+                    11,
+                    -358537222,
+                  )),
+                  m,
+                  f,
+                  d[n + 3],
+                  16,
+                  -722521979,
+                )),
+                i,
+                m,
+                d[n + 6],
+                23,
+                76029189,
+              )),
+              (r = md5_hh(
+                r,
+                (i = md5_hh(
+                  i,
+                  (m = md5_hh(m, f, r, i, d[n + 9], 4, -640364487)),
+                  f,
+                  r,
+                  d[n + 12],
+                  11,
+                  -421815835,
+                )),
+                m,
+                f,
+                d[n + 15],
+                16,
+                530742520,
+              )),
+              i,
+              m,
+              d[n + 2],
+              23,
+              -995338651,
+            )),
+            (r = md5_ii(
+              r,
+              (i = md5_ii(
+                i,
+                (m = md5_ii(m, f, r, i, d[n + 0], 6, -198630844)),
+                f,
+                r,
+                d[n + 7],
+                10,
+                1126891415,
+              )),
+              m,
+              f,
+              d[n + 14],
+              15,
+              -1416354905,
+            )),
+            i,
+            m,
+            d[n + 5],
+            21,
+            -57434055,
+          )),
+          (r = md5_ii(
+            r,
+            (i = md5_ii(
+              i,
+              (m = md5_ii(m, f, r, i, d[n + 12], 6, 1700485571)),
+              f,
+              r,
+              d[n + 3],
+              10,
+              -1894986606,
+            )),
+            m,
+            f,
+            d[n + 10],
+            15,
+            -1051523,
+          )),
+          i,
+          m,
+          d[n + 1],
+          21,
+          -2054922799,
+        )),
+        (r = md5_ii(
+          r,
+          (i = md5_ii(
+            i,
+            (m = md5_ii(m, f, r, i, d[n + 8], 6, 1873313359)),
+            f,
+            r,
+            d[n + 15],
+            10,
+            -30611744,
+          )),
+          m,
+          f,
+          d[n + 6],
+          15,
+          -1560198380,
+        )),
+        i,
+        m,
+        d[n + 13],
+        21,
+        1309151649,
+      )),
+      (r = md5_ii(
+        r,
+        (i = md5_ii(
+          i,
+          (m = md5_ii(m, f, r, i, d[n + 4], 6, -145523070)),
+          f,
+          r,
+          d[n + 11],
+          10,
+          -1120210379,
+        )),
+        m,
+        f,
+        d[n + 2],
+        15,
+        718787259,
+      )),
+      i,
+      m,
+      d[n + 9],
+      21,
+      -343485551,
+    )),
+      (m = safe_add(m, h)),
+      (f = safe_add(f, t)),
+      (r = safe_add(r, g)),
+      (i = safe_add(i, e));
+  }
+  return Array(m, f, r, i);
+}
+function md5_cmn(d, _, m, f, r, i) {
+  return safe_add(bit_rol(safe_add(safe_add(_, d), safe_add(f, i)), r), m);
+}
+function md5_ff(d, _, m, f, r, i, n) {
+  return md5_cmn((_ & m) | (~_ & f), d, _, r, i, n);
+}
+function md5_gg(d, _, m, f, r, i, n) {
+  return md5_cmn((_ & f) | (m & ~f), d, _, r, i, n);
+}
+function md5_hh(d, _, m, f, r, i, n) {
+  return md5_cmn(_ ^ m ^ f, d, _, r, i, n);
+}
+function md5_ii(d, _, m, f, r, i, n) {
+  return md5_cmn(m ^ (_ | ~f), d, _, r, i, n);
+}
+function safe_add(d, _) {
+  var m = (65535 & d) + (65535 & _);
+  return (((d >> 16) + (_ >> 16) + (m >> 16)) << 16) | (65535 & m);
+}
+function bit_rol(d, _) {
+  return (d << _) | (d >>> (32 - _));
+}
 
 /*
 Copyright 2024 Adobe. All rights reserved.
@@ -1414,6 +2007,7 @@ async function Client(clientOptions) {
   Container().registerInstance(TOKENS.RNG, rng);
   Container().registerInstance(TOKENS.HTTP_CLIENT, httpRequestAdapterInstance);
   Container().registerInstance(TOKENS.LOGGER, logger);
+  Container().registerInstance(TOKENS.MD5, md5);
   return BaseClient(clientOptions);
 }
 

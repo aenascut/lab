@@ -15,10 +15,10 @@ export async function responseProvider(request, response) {
     // Exercise 2. Create a new client instance
     // const client = await Client({
     //   orgId: "906E3A095DC834230A495FD6@AdobeOrg",
-    //   datastreamId: DATASTREAM_ID,
+    //   datastreamId: "",
+    //   propertyToken: ""
     //   oddEnabled: true,
-    //   edgeDomain: "",
-    //   propertyToken: "9f5e7f29-b117-4cc0-ac04-429288f0311e-exclusive"
+    //   edgeDomain: "abc.adobelab2025.com",
     // });
     logger.log("Instantiating client ");
 
@@ -27,7 +27,7 @@ export async function responseProvider(request, response) {
     const event = {
       type: "decisioning.propositionFetch",
       personalization: {
-        sendDisplayEvent: false,
+        sendDisplayEvent: true,
       },
       xdm: {
         web: {
@@ -51,38 +51,6 @@ export async function responseProvider(request, response) {
       return { id, scope, scopeDetails };
     });
     logger.log("Number of propositions " + propositions.length);
-
-    const propositionEvent = {
-      events: [
-        {
-          xdm: {
-            _experience: {
-              decisioning: {
-                propositions: [...propositions],
-                propositionEventType: {
-                  display: 1,
-                },
-              },
-            },
-            eventType: "decisioning.propositionDisplay",
-            web: {
-              webPageDetails: {
-                URL: address,
-              },
-              webReferrer: {
-                URL: "",
-              },
-            },
-            timestamp: new Date().toISOString(),
-            implementationDetails: {
-              environment: "server-side",
-            },
-          },
-        },
-      ],
-    };
-    // client.sendNotification(propositionEvent);
-    logger.log("Sending notification ");
 
     // Exercise 5. Apply the consequences to the origin stream
     const streamRewriter = new HtmlRewritingStream();
@@ -119,11 +87,11 @@ export async function responseProvider(request, response) {
               // match the DOM element based on the CSS selector
               // streamRewriter.onElement(proposition.selector, (el) => {
               //     el.replaceWith(proposition.payload);
-              });
-            });
+              //});
+            })
           }
           break;
-      }
+    }
     });
 
     // Additional debug info
@@ -134,8 +102,7 @@ export async function responseProvider(request, response) {
                 originUrl: '${ORIGIN_URL}',
                 ecidCookie: 'not set',
                 consequences: ${JSON.stringify(consequences)},
-                event:  ${JSON.stringify(event)}, 
-                propositionEvent:  ${JSON.stringify(propositionEvent)}, 
+                event:  ${JSON.stringify(event)}
             });
             console.log('Debug Info: ', debugInfo);
             </script>
