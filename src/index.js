@@ -12,17 +12,17 @@ export async function responseProvider(request, response) {
   try {
     logger.log("Creating response from the EdgeWorker");
 
-    // Create a new client instance
-    const client = await Client({
-      orgId: ORG_ID,
-      datastreamId: DATASTREAM_ID,
-      oddEnabled: true,
-      rules: rules,
-      edgeDomain: "",
-    });
+    // Exercise 1. Create a new client instance
+    // const client = await Client({
+    //   orgId: "906E3A095DC834230A495FD6@AdobeOrg",
+    //   datastreamId: DATASTREAM_ID,
+    //   oddEnabled: true,
+    //   edgeDomain: "",
+    //   propertyToken: "9f5e7f29-b117-4cc0-ac04-429288f0311e-exclusive"
+    // });
     logger.log("Instantiating client ");
 
-    // Retrieve the Consequences based on the request
+    // Exercise 3. Retrieve the Consequences based on the request
     const address = `${request.scheme}://${request.host}${request.url}`;
     const event = {
       type: "decisioning.propositionFetch",
@@ -39,10 +39,10 @@ export async function responseProvider(request, response) {
     };
     logger.log("Created server side event");
 
-    const consequences = await client.sendEvent(event);
+    // const consequences = await client.sendEvent(event);
     logger.log("Received consequences ");
 
-    // Extract the decisions from the consequences and create a notification event
+    // Exercise 4. Extract the decisions from the consequences and create a notification event
     const decisions = consequences.handle
       .filter((fragment) => fragment.type === "personalization:decisions")
       .flatMap((fragment) => fragment.payload);
@@ -84,7 +84,7 @@ export async function responseProvider(request, response) {
     // client.sendNotification(propositionEvent);
     logger.log("Sending notification ");
 
-    // Apply the consequences to the origin stream
+    // Exercise 5. Apply the consequences to the origin stream
     const streamRewriter = new HtmlRewritingStream();
     const originResponse = await httpRequest(ORIGIN_URL);
 
@@ -116,19 +116,17 @@ export async function responseProvider(request, response) {
               logger.log(
                 "Registering proposition " + proposition.selector + " " + proposition.type,
               );
-              streamRewriter.onElement(proposition.selector, (el) => {
-                if (proposition.type === "outerHTML") {
-                  el.replaceWith(proposition.payload);
-                }
-                if (proposition.type === "innerHTML") {
-                  el.replaceChildren(proposition.payload);
-                }
+              // match the DOM element based on the CSS selector
+              // streamRewriter.onElement(proposition.selector, (el) => {
+              //     el.replaceWith(proposition.payload);
               });
             });
           }
           break;
       }
     });
+
+    // Additional debug info
     streamRewriter.onElement("body", (el) => {
       const debugInfoInline = `
             <script>
@@ -145,13 +143,14 @@ export async function responseProvider(request, response) {
       el.append(debugInfoInline);
     });
 
-    return createResponse(
-      200,
-      {
-        "Powered-By": ["Akamai EdgeWorkers " + new Date().toString()],
-      },
-      originResponse.body.pipeThrough(streamRewriter),
-    );
+    // Exercise 6: Returning the processed response
+    // return createResponse(
+    //   200,
+    //   {
+    //     "Powered-By": ["Akamai EdgeWorkers " + new Date().toString()],
+    //   },
+    //   originResponse.body.pipeThrough(streamRewriter),
+    // );
   } catch (error) {
     logger.error(`Error: ${error.message}`);
     return createResponse(
