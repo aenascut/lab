@@ -12,13 +12,13 @@ export async function responseProvider(request, response) {
     logger.log("Creating response from the EdgeWorker");
 
     // Exercise 2. Create a new client instance
-    const client = await Client({
-      orgId: "906E3A095DC834230A495FD6@AdobeOrg",
-      datastreamId: "",
-      propertyToken: "",
-      oddEnabled: true,
-      edgeDomain: "abc.adobelab2025.com",
-    });
+    // const client = await Client({
+    //   orgId: "906E3A095DC834230A495FD6@AdobeOrg",
+    //   datastreamId: "",
+    //   propertyToken: "",
+    //   oddEnabled: true,
+    //   edgeDomain: "abc.adobelab2025.com",
+    // });
     logger.log("Instantiating client ");
 
     // Exercise 3. Retrieve the Consequences based on the request
