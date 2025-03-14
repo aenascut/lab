@@ -20,24 +20,24 @@ export async function responseProvider(request, response) {
     //   oddEnabled: true,
     //   edgeDomain: "abc.adobelab2025.com",
     // });
-    // logger.log("Instantiating client ");
+    logger.log("Instantiating client ");
 
-    // Exercise 3. Retrieve the Consequences based on the request
-    // const address = `${request.scheme}://${request.host}${request.url}`;
-    // const event = {
-    //   type: "decisioning.propositionFetch",
-    //   personalization: {
-    //     sendDisplayEvent: true,
-    //   },
-    //   xdm: {
-    //     web: {
-    //       webPageDetails: {
-    //         URL: address,
-    //       },
-    //     },
-    //   },
-    // };
-    // logger.log("Created server side event");
+    // Exercise 3. Create the event for the SDK Client
+    const address = `${request.scheme}://${request.host}${request.url}`;
+    const event = {
+      type: "decisioning.propositionFetch",
+      personalization: {
+        sendDisplayEvent: true,
+      },
+      xdm: {
+        web: {
+          webPageDetails: {
+            URL: address,
+          },
+        },
+      },
+    };
+    logger.log("Created server side event");
 
     // Additional step: Exercise 9. Extract the ECID from the request cookie and if it's present add it to the request
     // const cookies = new Cookies(request.getHeader("Cookie"));
@@ -54,14 +54,15 @@ export async function responseProvider(request, response) {
     //   }
     // }
 
+    // Exercise 3. Retrieve the Consequences based on the request
     // const consequences = await client.sendEvent(event);
     logger.log("Received consequences");
 
     // Exercise 5. Apply the consequences to the origin stream
     // const streamRewriter = new HtmlRewritingStream();
-    // const originResponse = await httpRequest(
-    //   "https://origin.adobelab2025.test.edgekey-staging.net",
-    // );
+    const originResponse = await httpRequest(
+      "https://origin.adobelab2025.test.edgekey-staging.net",
+    );
 
     // custom code that prevents alloy from the browser
     streamRewriter.onElement("head", (el) => {
