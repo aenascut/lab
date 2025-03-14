@@ -1,10 +1,9 @@
+import { Cookies } from "cookies";
 import { createResponse } from "create-response";
 import { httpRequest } from "http-request";
 import { logger } from "log";
 import { HtmlRewritingStream } from "html-rewriter";
 import { Client } from "./lib.js";
-import { DATASTREAM_ID, ORG_ID, PROPERTY_TOKEN, ORIGIN_URL } from "./config.js";
-import { rules } from "./rules.js";
 
 export async function responseProvider(request, response) {
   logger.log("Starting Hello World EdgeWorker");
@@ -13,13 +12,13 @@ export async function responseProvider(request, response) {
     logger.log("Creating response from the EdgeWorker");
 
     // Exercise 2. Create a new client instance
-    // const client = await Client({
-    //   orgId: "906E3A095DC834230A495FD6@AdobeOrg",
-    //   datastreamId: "",
-    //   propertyToken: ""
-    //   oddEnabled: true,
-    //   edgeDomain: "abc.adobelab2025.com",
-    // });
+    const client = await Client({
+      orgId: "906E3A095DC834230A495FD6@AdobeOrg",
+      datastreamId: "",
+      propertyToken: "",
+      oddEnabled: true,
+      edgeDomain: "abc.adobelab2025.com",
+    });
     logger.log("Instantiating client ");
 
     // Exercise 3. Retrieve the Consequences based on the request
@@ -39,6 +38,20 @@ export async function responseProvider(request, response) {
     };
     logger.log("Created server side event");
 
+    // Exercise 10. Extract the ECID from the request cookie and if it's present add it to the request
+    // const cookies = new Cookies(request.getHeader("Cookie"));
+    // const ecid = cookies.get("X-ADOBE-ECID");
+    // if (ecid) {
+    //   event.xdm.identityMap = {
+    //     ECID: [
+    //       {
+    //         id: ecid,
+    //         authenticatedState: "ambiguous",
+    //         primary: true,
+    //       },
+    //     ],
+    // }
+
     // const consequences = await client.sendEvent(event);
     logger.log("Received consequences ");
 
@@ -54,7 +67,9 @@ export async function responseProvider(request, response) {
 
     // Exercise 5. Apply the consequences to the origin stream
     const streamRewriter = new HtmlRewritingStream();
-    const originResponse = await httpRequest(ORIGIN_URL);
+    const originResponse = await httpRequest(
+      "https://origin.adobelab2025.test.edgekey-staging.net",
+    );
 
     const consequenceItems = consequences.handle
       .filter((payload) => payload.type === "personalization:decisions")
@@ -82,16 +97,19 @@ export async function responseProvider(request, response) {
           if (Array.isArray(payload)) {
             payload.forEach((proposition) => {
               logger.log(
-                "Registering proposition " + proposition.selector + " " + proposition.type,
+                "Registering proposition " +
+                  proposition.selector +
+                  " " +
+                  proposition.type,
               );
               // match the DOM element based on the CSS selector
               // streamRewriter.onElement(proposition.selector, (el) => {
               //     el.replaceWith(proposition.payload);
               //});
-            })
+            });
           }
           break;
-    }
+      }
     });
 
     // Additional debug info
@@ -99,8 +117,6 @@ export async function responseProvider(request, response) {
       const debugInfoInline = `
             <script>
             const debugInfo = JSON.stringify({
-                originUrl: '${ORIGIN_URL}',
-                ecidCookie: 'not set',
                 consequences: ${JSON.stringify(consequences)},
                 event:  ${JSON.stringify(event)}
             });
@@ -109,6 +125,19 @@ export async function responseProvider(request, response) {
             `;
       el.append(debugInfoInline);
     });
+
+    // Exercise 10. Persist the ECID in a cookie in the browser
+    // const ecidNamepace = responseWithConsequences.handle.find(
+    //     (payload) =>
+    //         payload.type === "identity:result" &&
+    //         payload.payload[0].namespace.code === "ECID",
+    // );
+    // const ecidValue = ecidNamepace.payload[0].id;
+    // streamRewriter.onElement("body", (el) => {
+    //   el.append(
+    //       `<script> document.cookie = "X-ADOBE-ECID=${ecidValue};SameSite=None; Secure"; </script>`,
+    //   );
+    // });
 
     // Exercise 6: Returning the processed response
     // return createResponse(

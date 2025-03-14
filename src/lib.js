@@ -1,6 +1,6 @@
-import { logger } from 'log';
-import { crypto } from 'crypto';
-import { httpRequest } from 'http-request';
+import { logger } from "log";
+import { crypto } from "crypto";
+import { httpRequest } from "http-request";
 
 /*
 Copyright 2024 Adobe. All rights reserved.
@@ -81,7 +81,6 @@ the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR REPRESENTA
 OF ANY KIND, either express or implied. See the License for the specific language
 governing permissions and limitations under the License.
 */
-
 
 const TOKENS = {
   RNG: "RNG",
@@ -179,7 +178,6 @@ OF ANY KIND, either express or implied. See the License for the specific languag
 governing permissions and limitations under the License.
 */
 
-
 const v4 = (rng) => {
   const buffer = rng();
 
@@ -201,7 +199,6 @@ OF ANY KIND, either express or implied. See the License for the specific languag
 governing permissions and limitations under the License.
 */
 
-
 const uuid = () => {
   const rng = Container().getInstance(TOKENS.RNG);
   return v4(rng);
@@ -218,7 +215,6 @@ the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR REPRESENTA
 OF ANY KIND, either express or implied. See the License for the specific language
 governing permissions and limitations under the License.
 */
-
 
 const createBigIntFromParts = (low, high) => {
   low = BigInt.asUintN(32, BigInt(low));
@@ -298,7 +294,6 @@ OF ANY KIND, either express or implied. See the License for the specific languag
 governing permissions and limitations under the License.
 */
 
-
 const getRequestIdentity = (namespaceCode) => {
   return (event) => {
     const namespace =
@@ -348,8 +343,8 @@ const createResponseIdentityPayload = (event) => {
 
 /**
  * The SendEvent method that returns a decision
- * @param {import("../types/Client").ClientOptions} clientOptions
- * @returns {import("../types/Client").SendEvent}
+ * @param {import("../types/index.js").ClientOptions} clientOptions
+ * @returns {import("../types/index.js").SendEvent}
  */
 const sendEvent = async (clientOptions, requestBody) => {
   const logAdapterInstance = Container().getInstance(TOKENS.LOGGER);
@@ -415,7 +410,6 @@ OF ANY KIND, either express or implied. See the License for the specific languag
 governing permissions and limitations under the License.
 */
 
-
 const AEP_EDGE_DOMAIN = "edge.adobedc.net";
 const EXP_EDGE_BASE_PATH_PROD = "ee";
 const DEFAULT_REQUEST_HEADERS$1 = {
@@ -479,9 +473,9 @@ OF ANY KIND, either express or implied. See the License for the specific languag
 governing permissions and limitations under the License.
 */
 
-
 const remoteSendEvent = async (clientOptions, requestBody) => {
-  return await edgeRequester(clientOptions, "interact", requestBody);
+  const adaptedRequest = { event: requestBody };
+  return await edgeRequester(clientOptions, "interact", adaptedRequest);
 };
 
 /*
@@ -496,15 +490,15 @@ OF ANY KIND, either express or implied. See the License for the specific languag
 governing permissions and limitations under the License.
 */
 
-
 const sendNotification = async (clientOptions, requestBody) => {
-  return edgeRequester(clientOptions, "interact", requestBody);
+  const adaptedRequest = { events: [requestBody] };
+  return edgeRequester(clientOptions, "collect", adaptedRequest);
 };
 
 const ConditionType = {
   MATCHER: "matcher",
   GROUP: "group",
-  HISTORICAL: "historical"
+  HISTORICAL: "historical",
 };
 const MatcherType = {
   EQUALS: "eq",
@@ -518,14 +512,14 @@ const MatcherType = {
   CONTAINS: "co",
   NOT_CONTAINS: "nc",
   STARTS_WITH: "sw",
-  ENDS_WITH: "ew"
+  ENDS_WITH: "ew",
 };
 const LogicType = {
   AND: "and",
-  OR: "or"
+  OR: "or",
 };
 const SearchType = {
-  ORDERED: "ordered"
+  ORDERED: "ordered",
 };
 
 function isObjectOrUndefined(value) {
@@ -540,12 +534,15 @@ function createEquals() {
       }
       const contextValue = String(context[key]).toLowerCase();
       for (let i = 0; i < values.length; i += 1) {
-        if (!isObjectOrUndefined(values[i]) && contextValue === String(values[i]).toLowerCase()) {
+        if (
+          !isObjectOrUndefined(values[i]) &&
+          contextValue === String(values[i]).toLowerCase()
+        ) {
           return true;
         }
       }
       return false;
-    }
+    },
   };
 }
 
@@ -557,12 +554,15 @@ function createNotEquals() {
       }
       const contextValue = String(context[key]).toLowerCase();
       for (let i = 0; i < values.length; i += 1) {
-        if (!isObjectOrUndefined(values[i]) && contextValue === String(values[i]).toLowerCase()) {
+        if (
+          !isObjectOrUndefined(values[i]) &&
+          contextValue === String(values[i]).toLowerCase()
+        ) {
           return false;
         }
       }
       return true;
-    }
+    },
   };
 }
 
@@ -570,7 +570,7 @@ function createExists() {
   return {
     matches: (context, key) => {
       return typeof context[key] !== "undefined" && context[key] !== null;
-    }
+    },
   };
 }
 
@@ -578,7 +578,7 @@ function createNotExists() {
   return {
     matches: (context, key) => {
       return typeof context[key] === "undefined" || context[key] === null;
-    }
+    },
   };
 }
 
@@ -599,7 +599,7 @@ function createGreaterThan() {
         }
       }
       return false;
-    }
+    },
   };
 }
 
@@ -616,7 +616,7 @@ function createGreaterThanEquals() {
         }
       }
       return false;
-    }
+    },
   };
 }
 
@@ -633,7 +633,7 @@ function createLessThan() {
         }
       }
       return false;
-    }
+    },
   };
 }
 
@@ -650,7 +650,7 @@ function createLessThanEquals() {
         }
       }
       return false;
-    }
+    },
   };
 }
 
@@ -662,12 +662,15 @@ function createContains() {
       }
       const contextValue = String(context[key]).toLowerCase();
       for (let i = 0; i < values.length; i += 1) {
-        if (!isObjectOrUndefined(values[i]) && contextValue.indexOf(String(values[i]).toLowerCase()) !== -1) {
+        if (
+          !isObjectOrUndefined(values[i]) &&
+          contextValue.indexOf(String(values[i]).toLowerCase()) !== -1
+        ) {
           return true;
         }
       }
       return false;
-    }
+    },
   };
 }
 
@@ -679,12 +682,15 @@ function createNotContains() {
       }
       const contextValue = String(context[key]).toLowerCase();
       for (let i = 0; i < values.length; i += 1) {
-        if (!isObjectOrUndefined(values[i]) && contextValue.indexOf(String(values[i]).toLowerCase()) !== -1) {
+        if (
+          !isObjectOrUndefined(values[i]) &&
+          contextValue.indexOf(String(values[i]).toLowerCase()) !== -1
+        ) {
           return false;
         }
       }
       return true;
-    }
+    },
   };
 }
 
@@ -696,12 +702,15 @@ function createStartsWith() {
       }
       const contextValue = String(context[key]).toLowerCase();
       for (let i = 0; i < values.length; i += 1) {
-        if (!isObjectOrUndefined(values[i]) && contextValue.startsWith(String(values[i]).toLowerCase())) {
+        if (
+          !isObjectOrUndefined(values[i]) &&
+          contextValue.startsWith(String(values[i]).toLowerCase())
+        ) {
           return true;
         }
       }
       return false;
-    }
+    },
   };
 }
 
@@ -713,12 +722,15 @@ function createEndsWith() {
       }
       const contextValue = String(context[key]).toLowerCase();
       for (let i = 0; i < values.length; i += 1) {
-        if (!isObjectOrUndefined(values[i]) && contextValue.endsWith(values[i].toLowerCase())) {
+        if (
+          !isObjectOrUndefined(values[i]) &&
+          contextValue.endsWith(values[i].toLowerCase())
+        ) {
           return true;
         }
       }
       return false;
-    }
+    },
   };
 }
 
@@ -734,7 +746,7 @@ const MATCHERS = {
   [MatcherType.CONTAINS]: createContains(),
   [MatcherType.NOT_CONTAINS]: createNotContains(),
   [MatcherType.STARTS_WITH]: createStartsWith(),
-  [MatcherType.ENDS_WITH]: createEndsWith()
+  [MatcherType.ENDS_WITH]: createEndsWith(),
 };
 function getMatcher(key) {
   return MATCHERS[key];
@@ -785,9 +797,7 @@ function eventSatisfiesCondition(historicalEventCondition, eventContext) {
   const eventKeys = keys(historicalEventCondition);
   for (let i = 0; i < eventKeys.length; i += 1) {
     const key = eventKeys[i];
-    const {
-      event = {}
-    } = eventContext;
+    const { event = {} } = eventContext;
     if (event[eventKeys[i]] !== historicalEventCondition[key]) {
       return false;
     }
@@ -815,10 +825,12 @@ function queryAndCountAnyEvent(events, context, from, to) {
     if (!eventSatisfiesCondition(event, contextEvent)) {
       return countTotal;
     }
-    const {
-      count: eventCount = 1
-    } = contextEvent;
-    if (isUndefined(from) || isUndefined(to) || contextEvent.timestamp >= from && contextEvent.timestamp <= to) {
+    const { count: eventCount = 1 } = contextEvent;
+    if (
+      isUndefined(from) ||
+      isUndefined(to) ||
+      (contextEvent.timestamp >= from && contextEvent.timestamp <= to)
+    ) {
       return countTotal + eventCount;
     }
     return countTotal;
@@ -826,7 +838,7 @@ function queryAndCountAnyEvent(events, context, from, to) {
 }
 function queryAndCountOrderedEvent(events, context, from, to) {
   let previousEventTimestamp = from;
-  const sameSequence = events.every(event => {
+  const sameSequence = events.every((event) => {
     const eventType = oneOf(event, VALID_EVENT_TYPES);
     if (!eventType) {
       return false;
@@ -843,10 +855,17 @@ function queryAndCountOrderedEvent(events, context, from, to) {
     if (!eventSatisfiesCondition(event, contextEvent)) {
       return false;
     }
-    if (contextEvent === null || isUndefined(contextEvent) || contextEvent.count === 0) {
+    if (
+      contextEvent === null ||
+      isUndefined(contextEvent) ||
+      contextEvent.count === 0
+    ) {
       return false;
     }
-    const ordered = (isUndefined(previousEventTimestamp) || contextEvent.timestamp >= previousEventTimestamp) && (isUndefined(to) || contextEvent.timestamp <= to);
+    const ordered =
+      (isUndefined(previousEventTimestamp) ||
+        contextEvent.timestamp >= previousEventTimestamp) &&
+      (isUndefined(to) || contextEvent.timestamp <= to);
     previousEventTimestamp = contextEvent.timestamp;
     return ordered;
   });
@@ -874,13 +893,13 @@ function createRules(version, rules, metadata) {
   return {
     version,
     rules,
-    metadata
+    metadata,
   };
 }
 function createRule(condition, consequences, key) {
   return {
     key,
-    execute: context => {
+    execute: (context) => {
       if (condition.evaluate(context)) {
         return consequences;
       }
@@ -888,29 +907,29 @@ function createRule(condition, consequences, key) {
     },
     toString: () => {
       return `Rule{condition=${condition}, consequences=${consequences}}`;
-    }
+    },
   };
 }
 function createCondition(type, definition) {
   return {
-    evaluate: context => {
+    evaluate: (context) => {
       return definition.evaluate(context);
     },
     toString() {
       return `Condition{type=${type}, definition=${definition}}`;
-    }
+    },
   };
 }
 function createConsequence(id, type, detail) {
   return {
     id,
     type,
-    detail
+    detail,
   };
 }
 function createGroupDefinition(logic, conditions) {
   return {
-    evaluate: context => {
+    evaluate: (context) => {
       if (LogicType.AND === logic) {
         return evaluateAnd(context, conditions);
       }
@@ -918,23 +937,30 @@ function createGroupDefinition(logic, conditions) {
         return evaluateOr(context, conditions);
       }
       return false;
-    }
+    },
   };
 }
 function createMatcherDefinition(key, matcherKey, values) {
   return {
-    evaluate: context => {
+    evaluate: (context) => {
       const matcher = getMatcher(matcherKey);
       if (!matcher) {
         return false;
       }
       return matcher.matches(context, key, values);
-    }
+    },
   };
 }
-function createHistoricalDefinition(events, matcherKey, value, from, to, searchType) {
+function createHistoricalDefinition(
+  events,
+  matcherKey,
+  value,
+  from,
+  to,
+  searchType,
+) {
   return {
-    evaluate: context => {
+    evaluate: (context) => {
       let eventCount;
       if (SearchType.ORDERED === searchType) {
         eventCount = queryAndCountOrderedEvent(events, context, from, to);
@@ -942,7 +968,7 @@ function createHistoricalDefinition(events, matcherKey, value, from, to, searchT
         eventCount = queryAndCountAnyEvent(events, context, from, to);
       }
       return checkForHistoricalMatcher(eventCount, matcherKey, value);
-    }
+    },
   };
 }
 
@@ -951,36 +977,26 @@ function assign(destination, value) {
 }
 
 function parseMatcherDefinition(definition) {
-  const {
-    key,
-    matcher,
-    values
-  } = definition;
+  const { key, matcher, values } = definition;
   return createMatcherDefinition(key, matcher, values);
 }
 function parseGroupDefinition(definition) {
-  const {
-    logic,
-    conditions
-  } = definition;
+  const { logic, conditions } = definition;
   return createGroupDefinition(logic, conditions.map(parseCondition));
 }
 function parseHistoricalDefinition(definition) {
-  const {
+  const { events, from, to, matcher, value, searchType } = definition;
+  return createHistoricalDefinition(
     events,
-    from,
-    to,
     matcher,
     value,
-    searchType
-  } = definition;
-  return createHistoricalDefinition(events, matcher, value, from, to, searchType);
+    from,
+    to,
+    searchType,
+  );
 }
 function parseCondition(condition) {
-  const {
-    type,
-    definition
-  } = condition;
+  const { type, definition } = condition;
   if (ConditionType.MATCHER === type) {
     const matchers = parseMatcherDefinition(definition);
     return createCondition(type, matchers);
@@ -996,19 +1012,11 @@ function parseCondition(condition) {
   throw new Error("Can not parse condition");
 }
 function parseConsequence(consequence) {
-  const {
-    id,
-    type,
-    detail
-  } = consequence;
+  const { id, type, detail } = consequence;
   return createConsequence(id, type, detail);
 }
 function parseRule(rule) {
-  const {
-    condition,
-    consequences,
-    key
-  } = rule;
+  const { condition, consequences, key } = rule;
   const parsedCondition = parseCondition(condition);
   const parsedConsequences = consequences.map(parseConsequence);
   return createRule(parsedCondition, parsedConsequences, key);
@@ -1019,16 +1027,12 @@ function parseMetadata(metadata) {
   }
   const result = {
     provider: metadata.provider,
-    providerData: assign({}, metadata.providerData)
+    providerData: assign({}, metadata.providerData),
   };
   return result;
 }
 function parseRules(ruleset) {
-  const {
-    version,
-    rules,
-    metadata
-  } = ruleset;
+  const { version, rules, metadata } = ruleset;
   const parsedRules = rules.map(parseRule);
   const parsedMetadata = parseMetadata(metadata);
   return createRules(version, parsedRules, parsedMetadata);
@@ -1040,21 +1044,19 @@ const DEFAULT_PROVIDER = "DEFAULT";
 function createDefaultRulesExecutor(rules) {
   return {
     provider: DEFAULT_PROVIDER,
-    execute: context => rules.map(rule => rule.execute(context)).filter(arr => arr.length > 0)
+    execute: (context) =>
+      rules
+        .map((rule) => rule.execute(context))
+        .filter((arr) => arr.length > 0),
   };
 }
 
 function validateMetadata(metadata) {
-  const {
-    providerData
-  } = metadata;
+  const { providerData } = metadata;
   if (!providerData) {
     throw new Error("Provider data is missing in metadata");
   }
-  const {
-    identityTemplate,
-    buckets
-  } = providerData;
+  const { identityTemplate, buckets } = providerData;
   if (!identityTemplate) {
     throw new Error("Identity template is missing in provider data");
   }
@@ -1065,15 +1067,11 @@ function validateMetadata(metadata) {
 
 const NAMESPACE = "ECID";
 function extractIdentity(context) {
-  const {
-    xdm
-  } = context;
+  const { xdm } = context;
   if (!xdm) {
     throw new Error("XDM object is missing in the context");
   }
-  const {
-    identityMap
-  } = xdm;
+  const { identityMap } = xdm;
   if (!identityMap) {
     throw new Error("Identity map is missing in the XDM object");
   }
@@ -1094,20 +1092,18 @@ function extractIdentity(context) {
 const KEY_PATTERN = "<key>";
 const IDENTITY_PATTERN = "<identity>";
 function createId(identity, key, metadata) {
-  const {
-    providerData
-  } = metadata;
-  const {
-    identityTemplate
-  } = providerData;
-  return identityTemplate.replace(KEY_PATTERN, key).replace(IDENTITY_PATTERN, identity);
+  const { providerData } = metadata;
+  const { identityTemplate } = providerData;
+  return identityTemplate
+    .replace(KEY_PATTERN, key)
+    .replace(IDENTITY_PATTERN, identity);
 }
 
 function isDefined(value) {
   return !isUndefined(value);
 }
 
-function memoize(func, keyResolverFunc = arr => arr[0]) {
+function memoize(func, keyResolverFunc = (arr) => arr[0]) {
   const memoizedValues = {};
   return function memoized(...funcArgs) {
     const key = keyResolverFunc(funcArgs);
@@ -1121,7 +1117,7 @@ function memoize(func, keyResolverFunc = arr => arr[0]) {
 function mul32(m, n) {
   const nlo = n & 0xffff;
   const nhi = n - nlo;
-  return (nhi * m | 0) + (nlo * m | 0) | 0;
+  return (((nhi * m) | 0) + ((nlo * m) | 0)) | 0;
 }
 function hashUnencodedCharsRaw(stringValue, seed = 0) {
   let k1;
@@ -1131,18 +1127,18 @@ function hashUnencodedCharsRaw(stringValue, seed = 0) {
   let h1 = seed;
   const roundedEnd = len & -2;
   for (let i = 0; i < roundedEnd; i += 2) {
-    k1 = stringValue.charCodeAt(i) | stringValue.charCodeAt(i + 1) << 16;
+    k1 = stringValue.charCodeAt(i) | (stringValue.charCodeAt(i + 1) << 16);
     k1 = mul32(k1, c1);
-    k1 = (k1 & 0x1ffff) << 15 | k1 >>> 17;
+    k1 = ((k1 & 0x1ffff) << 15) | (k1 >>> 17);
     k1 = mul32(k1, c2);
     h1 ^= k1;
-    h1 = (h1 & 0x7ffff) << 13 | h1 >>> 19;
-    h1 = h1 * 5 + 0xe6546b64 | 0;
+    h1 = ((h1 & 0x7ffff) << 13) | (h1 >>> 19);
+    h1 = (h1 * 5 + 0xe6546b64) | 0;
   }
   if (len % 2 === 1) {
     k1 = stringValue.charCodeAt(roundedEnd);
     k1 = mul32(k1, c1);
-    k1 = (k1 & 0x1ffff) << 15 | k1 >>> 17;
+    k1 = ((k1 & 0x1ffff) << 15) | (k1 >>> 17);
     k1 = mul32(k1, c2);
     h1 ^= k1;
   }
@@ -1154,13 +1150,15 @@ function hashUnencodedCharsRaw(stringValue, seed = 0) {
   h1 ^= h1 >>> 16;
   return h1;
 }
-const hashUnencodedChars = memoize(hashUnencodedCharsRaw, arr => arr.join("-"));
+const hashUnencodedChars = memoize(hashUnencodedCharsRaw, (arr) =>
+  arr.join("-"),
+);
 
 const MAX_PERCENTAGE = 100;
 function createAllocation(id, buckets) {
   const signedNumericHashValue = hashUnencodedChars(id);
   const hashFixedBucket = Math.abs(signedNumericHashValue) % buckets;
-  const allocationValue = hashFixedBucket / buckets * MAX_PERCENTAGE;
+  const allocationValue = (hashFixedBucket / buckets) * MAX_PERCENTAGE;
   return Math.round(allocationValue * MAX_PERCENTAGE) / MAX_PERCENTAGE;
 }
 const createAllocationMemoized = memoize(createAllocation);
@@ -1168,7 +1166,7 @@ function createContext(id, buckets, context) {
   const allocation = createAllocationMemoized(id, buckets);
   return {
     allocation,
-    ...context
+    ...context,
   };
 }
 
@@ -1187,18 +1185,18 @@ function groupRules(rules) {
   return result;
 }
 function evaluateRules(context, rules) {
-  return rules.map(rule => rule.execute(context)).filter(arr => arr.length > 0);
+  return rules
+    .map((rule) => rule.execute(context))
+    .filter((arr) => arr.length > 0);
 }
 function createTargetRulesExecutor(rules, metadata) {
   validateMetadata(metadata);
-  const rulesNoKey = rules.filter(rule => !rule.key);
+  const rulesNoKey = rules.filter((rule) => !rule.key);
   const rulesWithKeys = groupRules(rules);
-  const {
-    buckets
-  } = metadata.providerData;
+  const { buckets } = metadata.providerData;
   return {
     provider: TARGET_PROVIDER,
-    execute: context => {
+    execute: (context) => {
       const identity = extractIdentity(context);
       const consequencesNoKey = evaluateRules(context, rulesNoKey);
       const rulesKeys = keys(rulesWithKeys);
@@ -1212,7 +1210,7 @@ function createTargetRulesExecutor(rules, metadata) {
         consequencesWithKeys.push(...consequences);
       }
       return [...consequencesNoKey, ...consequencesWithKeys];
-    }
+    },
   };
 }
 
@@ -1220,9 +1218,7 @@ function createExecutor(rules, metadata) {
   if (!metadata) {
     return createDefaultRulesExecutor(rules);
   }
-  const {
-    provider
-  } = metadata;
+  const { provider } = metadata;
   if (provider === TARGET_PROVIDER) {
     return createTargetRulesExecutor(rules, metadata);
   }
@@ -1230,10 +1226,7 @@ function createExecutor(rules, metadata) {
 }
 
 function RulesEngine(ruleset) {
-  const {
-    rules,
-    metadata
-  } = parseRules(ruleset);
+  const { rules, metadata } = parseRules(ruleset);
   return createExecutor(rules, metadata);
 }
 
@@ -1248,7 +1241,6 @@ the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR REPRESENTA
 OF ANY KIND, either express or implied. See the License for the specific language
 governing permissions and limitations under the License.
 */
-
 
 const RuleEngine = (options) => {
   const { rules } = options;
@@ -1273,7 +1265,6 @@ the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR REPRESENTA
 OF ANY KIND, either express or implied. See the License for the specific language
 governing permissions and limitations under the License.
 */
-
 
 const TARGET_EDGE_DOMAIN = "assets.adobetarget.com";
 const RULE_BASE_PATH_PROD = "aep-odd-rules";
@@ -1352,17 +1343,15 @@ const eventNotificationAdaptor = (requestBody, response) => {
     }) || [];
 
   const displayEvent = {
-    event: {
-      xdm: {
-        ...requestBody.xdm,
-        eventType: "decisioning.propositionDisplay",
-        timestamp: new Date().toISOString(),
-        _experience: {
-          decisioning: {
-            propositions: propositions,
-            propositionEventType: {
-              display: 1,
-            },
+    xdm: {
+      ...requestBody.xdm,
+      eventType: "decisioning.propositionDisplay",
+      timestamp: new Date().toISOString(),
+      _experience: {
+        decisioning: {
+          propositions: propositions,
+          propositionEventType: {
+            display: 1,
           },
         },
       },
@@ -1384,11 +1373,10 @@ OF ANY KIND, either express or implied. See the License for the specific languag
 governing permissions and limitations under the License.
 */
 
-
 /**
  * The Client initialization method
- * @param {import("../types/Client").ClientOptions} clientOptions
- * @returns {Promise<import("../types/Client").ClientResponse>}
+ * @param {import("../types/index.js").ClientOptions} clientOptions
+ * @returns {Promise<import("../types/index.js").ClientResponse>}
  */
 async function BaseClient(clientOptions) {
   const options = { ...clientOptions };
@@ -2002,7 +1990,11 @@ OF ANY KIND, either express or implied. See the License for the specific languag
 governing permissions and limitations under the License.
 */
 
-
+/**
+ * The Client initialization method
+ * @param {import("@adobe/target-cdn-experimentation-core/types/").ClientOptions} clientOptions
+ * @returns {Promise<import("@adobe/target-cdn-experimentation-core/types/").ClientResponse>}
+ */
 async function Client(clientOptions) {
   Container().registerInstance(TOKENS.RNG, rng);
   Container().registerInstance(TOKENS.HTTP_CLIENT, httpRequestAdapterInstance);
